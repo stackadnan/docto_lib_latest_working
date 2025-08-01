@@ -87,16 +87,26 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 phone_numbers_count = len([line.strip() for line in lines if line.strip()])
         
         # Count registered numbers
+        registered_numbers = set()
         if os.path.exists(REGISTERED_FILE):
             with open(REGISTERED_FILE, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-                registered_count = len([line.strip() for line in lines if line.strip()])
+                registered_numbers = set([line.strip() for line in lines if line.strip()])
+                registered_count = len(registered_numbers)
         
         # Count not registered numbers
+        not_registered_numbers = set()
         if os.path.exists(NOT_REGISTERED_FILE):
             with open(NOT_REGISTERED_FILE, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-                not_registered_count = len([line.strip() for line in lines if line.strip()])
+                not_registered_numbers = set([line.strip() for line in lines if line.strip()])
+                not_registered_count = len(not_registered_numbers)
+        
+        # Remove any overlap to avoid double counting (prioritize registered status)
+        if registered_numbers and not_registered_numbers:
+            overlap = registered_numbers.intersection(not_registered_numbers)
+            if overlap:
+                not_registered_count = len(not_registered_numbers - registered_numbers)
         
         # Calculate progress
         total_processed = registered_count + not_registered_count
@@ -288,14 +298,7 @@ def stop_processing_services():
 
 def monitor_processing(bot):
     """Monitor the phone_numbers.txt file and send results when complete."""
-    global processing_active, processing_chat_id
-    
-    # Store the initial count to track progress accurately
-    initial_phone_count = 0
-    if os.path.exists(PHONE_NUMBERS_FILE):
-        with open(PHONE_NUMBERS_FILE, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            initial_phone_count = len([line.strip() for line in lines if line.strip()])
+    global processing_active, processing_chat_id, initial_phone_count
     
     logger.info(f"Starting monitoring with {initial_phone_count} initial phone numbers")
     
@@ -316,13 +319,23 @@ def monitor_processing(bot):
             if os.path.exists(REGISTERED_FILE):
                 with open(REGISTERED_FILE, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
-                    registered_count = len([line.strip() for line in lines if line.strip()])
+                    registered_numbers = set([line.strip() for line in lines if line.strip()])
+                    registered_count = len(registered_numbers)
             
             # Count not registered numbers
             if os.path.exists(NOT_REGISTERED_FILE):
                 with open(NOT_REGISTERED_FILE, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
-                    not_registered_count = len([line.strip() for line in lines if line.strip()])
+                    not_registered_numbers = set([line.strip() for line in lines if line.strip()])
+                    not_registered_count = len(not_registered_numbers)
+            
+            # Remove any overlap between registered and not_registered to avoid double counting
+            if os.path.exists(REGISTERED_FILE) and os.path.exists(NOT_REGISTERED_FILE):
+                overlap = registered_numbers.intersection(not_registered_numbers)
+                if overlap:
+                    logger.warning(f"Found {len(overlap)} overlapping numbers between registered and not_registered files")
+                    # Prioritize registered status and remove from not_registered count
+                    not_registered_count = len(not_registered_numbers - registered_numbers)
             
             total_processed = registered_count + not_registered_count
             
@@ -374,26 +387,79 @@ def monitor_processing(bot):
         # Wait 5 seconds before checking again
         time.sleep(5)
 
+def cleanup_result_files():
+    """Remove duplicate entries from result files and handle overlaps."""
+    try:
+        registered_numbers = set()
+        not_registered_numbers = set()
+        
+        # Read registered numbers
+        if os.path.exists(REGISTERED_FILE):
+            with open(REGISTERED_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                registered_numbers = set([line.strip() for line in lines if line.strip()])
+        
+        # Read not registered numbers
+        if os.path.exists(NOT_REGISTERED_FILE):
+            with open(NOT_REGISTERED_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                not_registered_numbers = set([line.strip() for line in lines if line.strip()])
+        
+        # Remove overlaps (prioritize registered status)
+        if registered_numbers and not_registered_numbers:
+            overlap = registered_numbers.intersection(not_registered_numbers)
+            if overlap:
+                logger.info(f"Cleaning up {len(overlap)} overlapping numbers from not_registered file")
+                not_registered_numbers = not_registered_numbers - registered_numbers
+        
+        # Rewrite files with cleaned data
+        if registered_numbers:
+            with open(REGISTERED_FILE, 'w', encoding='utf-8') as f:
+                for number in sorted(registered_numbers):
+                    f.write(f"{number}\n")
+            logger.info(f"Cleaned registered.txt: {len(registered_numbers)} unique numbers")
+        
+        if not_registered_numbers:
+            with open(NOT_REGISTERED_FILE, 'w', encoding='utf-8') as f:
+                for number in sorted(not_registered_numbers):
+                    f.write(f"{number}\n")
+            logger.info(f"Cleaned not_registered.txt: {len(not_registered_numbers)} unique numbers")
+    
+    except Exception as e:
+        logger.error(f"Error cleaning result files: {e}")
+
 async def send_results(bot, chat_id):
     """Send the result files to the user."""
     try:
         logger.info(f"Starting send_results function for chat_id: {chat_id}")
         
-        # Count final results
-        registered_count = 0
-        not_registered_count = 0
+        # Clean up duplicate entries in result files before sending
+        cleanup_result_files()
+        
+        # Count final results with deduplication
+        registered_numbers = set()
+        not_registered_numbers = set()
         
         if os.path.exists(REGISTERED_FILE):
             with open(REGISTERED_FILE, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-                registered_count = len([line.strip() for line in lines if line.strip()])
-            logger.info(f"Found {registered_count} registered numbers")
+                registered_numbers = set([line.strip() for line in lines if line.strip()])
+                registered_count = len(registered_numbers)
+            logger.info(f"Found {registered_count} unique registered numbers")
         
         if os.path.exists(NOT_REGISTERED_FILE):
             with open(NOT_REGISTERED_FILE, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-                not_registered_count = len([line.strip() for line in lines if line.strip()])
-            logger.info(f"Found {not_registered_count} not registered numbers")
+                not_registered_numbers = set([line.strip() for line in lines if line.strip()])
+                not_registered_count = len(not_registered_numbers)
+            logger.info(f"Found {not_registered_count} unique not registered numbers")
+        
+        # Remove overlaps (prioritize registered status)
+        if registered_numbers and not_registered_numbers:
+            overlap = registered_numbers.intersection(not_registered_numbers)
+            if overlap:
+                logger.warning(f"Found {len(overlap)} overlapping numbers, prioritizing registered status")
+                not_registered_count = len(not_registered_numbers - registered_numbers)
         
         # Send completion message with summary
         completion_message = f"""

@@ -152,7 +152,7 @@ async def check_registration_status(page, phone_number, index):
                             # Method 1: Check if progress element still exists
                             progress_elements = await page.query_selector_all('.frc-progress')
                             if not progress_elements:
-                                print(f"[{index}] ✅ Progress bar disappeared (method 1: element removed) - Stage {current_stage}")
+                                logger.info(f"[{index}] ✅ Progress bar disappeared (method 1: element removed) - Stage {current_stage}")
                                 progress_complete = True
                                 break
                             
@@ -168,12 +168,12 @@ async def check_registration_status(page, phone_number, index):
                             
                             progress_text = progress_text.strip()
                             if progress_text:
-                                print(f"[{index}] 📊 Stage {current_stage} - Progress status: {progress_text}")
+                                logger.info(f"[{index}] 📊 Stage {current_stage} - Progress status: {progress_text}")
                                 
                                 # Check for completion indicators in text
                                 completion_indicators = ["100%", "complete", "completed", "fertig", "done", "finished", "vollständig"]
                                 if any(indicator in progress_text.lower() for indicator in completion_indicators):
-                                    print(f"[{index}] ✅ Progress completed (method 2: completion text found) - Stage {current_stage}")
+                                    logger.info(f"[{index}] ✅ Progress completed (method 2: completion text found) - Stage {current_stage}")
                                     progress_complete = True
                                     break
                             
@@ -188,10 +188,10 @@ async def check_registration_status(page, phone_number, index):
                                         max_value = float(aria_max)
                                         progress_percent = (current_value / max_value) * 100
                                         
-                                        print(f"[{index}] 📈 Stage {current_stage} - Progress: {progress_percent:.1f}% ({current_value}/{max_value})")
+                                        logger.info(f"[{index}] 📈 Stage {current_stage} - Progress: {progress_percent:.1f}% ({current_value}/{max_value})")
                                         
                                         if progress_percent >= 100:
-                                            print(f"[{index}] ✅ Progress completed (method 3: aria-valuenow = 100%) - Stage {current_stage}")
+                                            logger.info(f"[{index}] ✅ Progress completed (method 3: aria-valuenow = 100%) - Stage {current_stage}")
                                             progress_complete = True
                                             break
                                         
@@ -199,12 +199,12 @@ async def check_registration_status(page, phone_number, index):
                                         if last_progress_value == current_value:
                                             progress_stuck_count += 1
                                             if progress_stuck_count > 20:  # Stuck for more than 10 seconds
-                                                print(f"[{index}] ⚠️ Stage {current_stage} - Progress appears stuck at {progress_percent:.1f}%, checking completion...")
+                                                logger.warning(f"[{index}] ⚠️ Stage {current_stage} - Progress appears stuck at {progress_percent:.1f}%, checking completion...")
                                                 # Wait a bit more and check if element disappears
                                                 await asyncio.sleep(2)
                                                 remaining_elements = await page.query_selector_all('.frc-progress')
                                                 if not remaining_elements:
-                                                    print(f"[{index}] ✅ Progress completed (method 3: stuck but element removed) - Stage {current_stage}")
+                                                    logger.info(f"[{index}] ✅ Progress completed (method 3: stuck but element removed) - Stage {current_stage}")
                                                     progress_complete = True
                                                     break
                                         else:
@@ -218,7 +218,7 @@ async def check_registration_status(page, phone_number, index):
                                 try:
                                     class_name = await element.get_attribute('class') or ""
                                     if any(cls in class_name.lower() for cls in ['complete', 'finished', 'done', 'success']):
-                                        print(f"[{index}] ✅ Progress completed (method 4: completion class found) - Stage {current_stage}")
+                                        logger.info(f"[{index}] ✅ Progress completed (method 4: completion class found) - Stage {current_stage}")
                                         progress_complete = True
                                         break
                                 except:
@@ -229,7 +229,7 @@ async def check_registration_status(page, phone_number, index):
                                 try:
                                     style = await element.get_attribute('style') or ""
                                     if 'width: 100%' in style or 'width:100%' in style:
-                                        print(f"[{index}] ✅ Progress completed (method 5: width 100% in style) - Stage {current_stage}")
+                                        logger.info(f"[{index}] ✅ Progress completed (method 5: width 100% in style) - Stage {current_stage}")
                                         progress_complete = True
                                         break
                                 except:
@@ -247,13 +247,13 @@ async def check_registration_status(page, phone_number, index):
                                 await asyncio.sleep(0.8)
                             
                         except Exception as e:
-                            print(f"[{index}] ⚠️ Stage {current_stage} - Error in progress monitoring: {e}")
+                            logger.error(f"[{index}] ⚠️ Stage {current_stage} - Error in progress monitoring: {e}")
                             # If there's an error, wait a bit and check if element still exists
                             await asyncio.sleep(1)
                             try:
                                 remaining_elements = await page.query_selector_all('.frc-progress')
                                 if not remaining_elements:
-                                    print(f"[{index}] ✅ Progress completed (error recovery: element disappeared) - Stage {current_stage}")
+                                    logger.info(f"[{index}] ✅ Progress completed (error recovery: element disappeared) - Stage {current_stage}")
                                     progress_complete = True
                                     break
                             except:
@@ -261,7 +261,7 @@ async def check_registration_status(page, phone_number, index):
                     
                     if not progress_complete:
                         stage_elapsed = asyncio.get_event_loop().time() - stage_start_time
-                        print(f"[{index}] ⏱️ Stage {current_stage} completed ({stage_elapsed:.1f}s) - Progress still running, moving to next stage...")
+                        logger.info(f"[{index}] ⏱️ Stage {current_stage} completed ({stage_elapsed:.1f}s) - Progress still running, moving to next stage...")
                         current_stage += 1
                         
                         # Brief pause between stages
@@ -270,7 +270,7 @@ async def check_registration_status(page, phone_number, index):
                 # Final completion handling
                 if progress_complete:
                     total_elapsed = asyncio.get_event_loop().time() - overall_start_time
-                    print(f"[{index}] 🎯 Progress monitoring completed successfully after {total_elapsed:.1f}s (Stage {current_stage})")
+                    logger.info(f"[{index}] 🎯 Progress monitoring completed successfully after {total_elapsed:.1f}s (Stage {current_stage})")
                     # Wait a moment for any final page updates
                     await asyncio.sleep(random.uniform(1, 3))
                     
@@ -278,13 +278,13 @@ async def check_registration_status(page, phone_number, index):
                     cookies = await page.context.cookies()
                     dl_frcid = next((c['value'] for c in cookies if c['name'] == 'dl_frcid'), None)
                     if dl_frcid:
-                        print(f"[{index}] 🍪 Cookie found after progress completion: {dl_frcid}")
+                        logger.info(f"[{index}] 🍪 Cookie found after progress completion: {dl_frcid}")
                         return 'cookie_found'
                     else:
-                        print(f"[{index}] 📝 Progress completed but no cookie found yet, continuing with normal checks...")
+                        logger.info(f"[{index}] 📝 Progress completed but no cookie found yet, continuing with normal checks...")
                 else:
                     total_elapsed = asyncio.get_event_loop().time() - overall_start_time
-                    print(f"[{index}] ⏰ Progress monitoring timeout after {total_elapsed:.1f}s ({max_stages} stages completed)")
+                    logger.warning(f"[{index}] ⏰ Progress monitoring timeout after {total_elapsed:.1f}s ({max_stages} stages completed)")
                     # Still continue with normal checks even after timeout
         except:
             pass  # No progress bar found, continue with normal checks
@@ -293,7 +293,7 @@ async def check_registration_status(page, phone_number, index):
         cookies = await page.context.cookies()
         dl_frcid = next((c['value'] for c in cookies if c['name'] == 'dl_frcid'), None)
         if dl_frcid:
-            print(f"[{index}] 🍪 Cookie found: {dl_frcid}")
+            logger.info(f"[{index}] 🍪 Cookie found: {dl_frcid}")
             return 'cookie_found'
         
         # Check for "Wie heißen Sie?" text (indicates not registered)
@@ -312,7 +312,7 @@ async def check_registration_status(page, phone_number, index):
                 try:
                     element = await page.wait_for_selector(selector, timeout=3000)
                     if element:
-                        print(f"[{index}] ❌ Phone {phone_number} - NOT REGISTERED (found '{selector}')")
+                        logger.info(f"[{index}] ❌ Phone {phone_number} - NOT REGISTERED (found '{selector}')")
                         # Save to not_registered.txt and remove from phone_numbers.txt
                         save_phone_result(phone_number, False)
                         remove_phone_from_file(phone_number)
@@ -341,25 +341,25 @@ async def check_registration_status(page, phone_number, index):
                         # Double check by looking for text content
                         text_content = await element.text_content() if hasattr(element, 'text_content') else ""
                         if "existierendes" in text_content.lower() or "konto" in text_content.lower():
-                            print(f"[{index}] ✅ Phone {phone_number} - REGISTERED (found existing account)")
+                            logger.info(f"[{index}] ✅ Phone {phone_number} - REGISTERED (found existing account)")
                             # Save to registered.txt and remove from phone_numbers.txt
                             save_phone_result(phone_number, True)
                             remove_phone_from_file(phone_number)
                             
                             # Instead of going back, click on the 6th dl-button-label to continue
                             try:
-                                print(f"[{index}] 🔄 Clicking 6th dl-button-label to continue with next number...")
+                                logger.info(f"[{index}] 🔄 Clicking 6th dl-button-label to continue with next number...")
                                 button_elements = await page.query_selector_all('.dl-button-label')
                                 if len(button_elements) >= 6:
                                     await button_elements[5].click()  # 6th element (0-indexed)
                                     await asyncio.sleep(random.uniform(1, 2))
-                                    print(f"[{index}] ✅ Successfully clicked 6th dl-button-label")
+                                    logger.info(f"[{index}] ✅ Successfully clicked 6th dl-button-label")
                                     return 'registered_continue'  # New status to indicate we can continue
                                 else:
-                                    print(f"[{index}] ⚠️ Only found {len(button_elements)} dl-button-label elements, expected at least 6")
+                                    logger.warning(f"[{index}] ⚠️ Only found {len(button_elements)} dl-button-label elements, expected at least 6")
                                     return 'registered'  # Fall back to normal registered handling
                             except Exception as e:
-                                print(f"[{index}] ❌ Error clicking 6th dl-button-label: {e}")
+                                logger.error(f"[{index}] ❌ Error clicking 6th dl-button-label: {e}")
                                 return 'registered'  # Fall back to normal registered handling
                 except:
                     continue
@@ -371,22 +371,22 @@ async def check_registration_status(page, phone_number, index):
             # Check if we're still on the same page or redirected
             current_url = page.url
             if "registrations" not in current_url:
-                print(f"[{index}] 🔄 Redirected to: {current_url}")
+                logger.info(f"[{index}] 🔄 Redirected to: {current_url}")
                 # Check cookies again after potential redirect
                 cookies = await page.context.cookies()
                 dl_frcid = next((c['value'] for c in cookies if c['name'] == 'dl_frcid'), None)
                 if dl_frcid:
-                    print(f"[{index}] 🍪 Cookie found after redirect: {dl_frcid}")
+                    logger.info(f"[{index}] 🍪 Cookie found after redirect: {dl_frcid}")
                     return 'cookie_found'
         except:
             pass
         
         # If nothing found, return error to try again
-        print(f"[{index}] ⚠️ No clear status detected for {phone_number}, will retry...")
+        logger.warning(f"[{index}] ⚠️ No clear status detected for {phone_number}, will retry...")
         return 'error'
         
     except Exception as e:
-        print(f"[{index}] ❌ Error checking registration status: {e}")
+        logger.error(f"[{index}] ❌ Error checking registration status: {e}")
         return 'error'
 
 async def go_back_and_retry(page, index):
