@@ -708,8 +708,8 @@ async def main():
     # Start with just 1 instance for testing, can be increased later
     logger.info("🚀 Starting browser fingerprint rotation system...")
     logger.info("📊 Each request will use a completely different fingerprint")
-    logger.info(f"Starting {3} browser instances")
-    tasks = [run_instance(i) for i in range(3)]  # Start with 3 instances
+    logger.info(f"Starting {20} browser instances")
+    tasks = [run_instance(i) for i in range(20)]  # Start with 20 instances
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

@@ -314,7 +314,7 @@ async def scraping():
             logger.info(f"Processing batch with {len(current_numbers)} remaining numbers")
             
             # Take up to 5 numbers for this batch (reduced from 10 to avoid overwhelming)
-            batch_size = min(5, len(current_numbers))
+            batch_size = min(3, len(current_numbers))
             batch_numbers = current_numbers[:batch_size]
             
             logger.info(f"Processing batch of {batch_size} numbers")
