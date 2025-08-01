@@ -33,7 +33,7 @@ headers = {
     "sec-fetch-dest": "empty",
     "accept-encoding": "gzip, deflate, br, zstd",
     "accept-language": "en-US,en;q=0.9",
-    "cookie": "AUTH_SESSION_ID=0792a203-2437-4355-8c43-10b00da5d9f4.keycloak-patients-2-25837; AUTH_SESSION_ID_LEGACY=0792a203-2437-4355-8c43-10b00da5d9f4.keycloak-patients-2-25837; __cf_bm=6vgoE0NtZSiSpWRqVIuTLyTB4OEiJxPkPpxbV3R8y_8-1754044720-1.0.1.1-id6PPCbjEDZ3qJrd_ERvjKSP_f93Bv.B193Ysq9DIZCj_v879rQNBHCd0Q0bM_A2zoPE8eQBFZ2lejTbi5AanApBK7yWynKxy75Z_P0i.PkPlYT7lq3nO6XMLYxkV.yJ; _cfuvid=tsZpI73XcG1IXucXzzHM16y_ed52daSuWVsdHYFntYM-1754044720902-0.0.1.1-604800000; __cf_bm=0G.tO2LHLFW9nXydeC9NFoCMkq4tgqwEMHZfBvdzqn8-1754044721-1.0.1.1-W6uO1paJ65587rPeBjrRl7_pkEksheWdd3s5WVCInTwbMcI15lbsVDM7Uyn6ZXABFNV_.CXjNrjhNx.6489UXB4ED9s38phUU2cMvyN1fR_WYfCrwiWYBg2UvZ28GLGi; _cfuvid=U7CecjQyY6MPETu1RzO.i3.O81DDu93KxSwnBo.WdLw-1754044721974-0.0.1.1-604800000; dl_frcid=f6891a3c-945d-47db-93e5-dadad80014b9; _dd_s=aid=ff99c8ed-887a-4a4b-a6a2-a356eaa09e46&rum=0&expire=1754045623807"
+    "cookie": "_dd_s=aid=40a2cceb-c89e-429e-9fba-2e5ccf06e3e9&rum=0&expire=1754052158944"
 }
 
 response = requests.post(url, json=payload, headers=headers)

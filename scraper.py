@@ -110,7 +110,7 @@ def add_number_for_retry(phone_number, max_retries=3):
 
 async def check_phone_number(session, phone_number, cookie, proxy, headers_template, url):
     headers = headers_template.copy()
-    headers["cookie"] = f"{cookie}"
+    headers["cookie"] = f"dl_frcid={cookie}"
     payload = {"username": phone_number, "clientId": "patient-de-client"}
 
     try:
@@ -305,9 +305,9 @@ async def scraping():
             
             # Check if we have too many consecutive errors
             if consecutive_errors >= max_consecutive_errors:
-                logger.error(f"Too many consecutive errors ({consecutive_errors}). Pausing for 5 minutes.")
-                print(f"[ERROR] Too many consecutive errors. Pausing for 5 minutes.")
-                await asyncio.sleep(300)  # 5 minutes
+                logger.error(f"Too many consecutive errors ({consecutive_errors}). Pausing for 10 minutes.")
+                print(f"[ERROR] Too many consecutive errors. Pausing for 10 minutes.")
+                await asyncio.sleep(60)  # 10 minutes
                 consecutive_errors = 0
                 continue
             
