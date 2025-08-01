@@ -85,6 +85,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             with open(PHONE_NUMBERS_FILE, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
                 phone_numbers_count = len([line.strip() for line in lines if line.strip()])
+                logger.debug(f"Phone numbers remaining: {phone_numbers_count}")
         
         # Count registered numbers
         registered_numbers = set()
@@ -93,6 +94,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 lines = f.readlines()
                 registered_numbers = set([line.strip() for line in lines if line.strip()])
                 registered_count = len(registered_numbers)
+                logger.debug(f"Registered numbers found: {registered_count}")
         
         # Count not registered numbers
         not_registered_numbers = set()
@@ -101,16 +103,22 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 lines = f.readlines()
                 not_registered_numbers = set([line.strip() for line in lines if line.strip()])
                 not_registered_count = len(not_registered_numbers)
+                logger.debug(f"Not registered numbers found: {not_registered_count}")
         
         # Remove any overlap to avoid double counting (prioritize registered status)
+        overlap_count = 0
         if registered_numbers and not_registered_numbers:
             overlap = registered_numbers.intersection(not_registered_numbers)
             if overlap:
+                overlap_count = len(overlap)
                 not_registered_count = len(not_registered_numbers - registered_numbers)
+                logger.debug(f"Found {overlap_count} overlapping numbers, adjusted not_registered count to {not_registered_count}")
         
         # Calculate progress
         total_processed = registered_count + not_registered_count
         progress_percentage = (total_processed / initial_phone_count * 100) if initial_phone_count > 0 else 0
+        
+        logger.debug(f"Status Summary: Initial={initial_phone_count}, Registered={registered_count}, Not_Registered={not_registered_count}, Total_Processed={total_processed}, Remaining={phone_numbers_count}, Progress={progress_percentage:.1f}%")
         
         # Check if processing is complete
         if total_processed >= initial_phone_count:

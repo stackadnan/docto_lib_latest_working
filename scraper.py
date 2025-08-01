@@ -151,6 +151,7 @@ async def check_phone_number(session, phone_number, cookie, proxy, headers_templ
                 try:
                     with open("results/not_registered.txt", "a", encoding='utf-8') as f:
                         f.write(f"{phone_number}\n")
+                    logger.info(f"Saved {phone_number} to not_registered.txt (HTTP error {response.status})")
                 except Exception as e:
                     logger.error(f"Error writing to not_registered.txt: {e}")
                 
@@ -175,6 +176,14 @@ async def check_phone_number(session, phone_number, cookie, proxy, headers_templ
         else:
             logger.error(f"[EXCEPTION] {phone_number} with cookie {cookie[:8]}... failed: {e}")
             print(f"[EXCEPTION] {phone_number} with cookie failed: {e}")
+            
+            # Write to not_registered file for exceptions (so numbers don't disappear)
+            try:
+                with open("results/not_registered.txt", "a", encoding='utf-8') as f:
+                    f.write(f"{phone_number}\n")
+                logger.info(f"Saved {phone_number} to not_registered.txt (exception)")
+            except Exception as write_e:
+                logger.error(f"Error writing to not_registered.txt: {write_e}")
             
             # Remove from phone_numbers.txt for other exceptions
             safe_remove_phone_number(phone_number)
