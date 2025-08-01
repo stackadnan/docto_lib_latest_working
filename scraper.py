@@ -222,227 +222,236 @@ async def load_cookies():
 async def scraping():
     url = "https://www.doctolib.de/authn/patient/realms/doctolib-patient/accounts/check_existence"
 
-    # Load phone numbers initially
-    phone_numbers = safe_read_phone_numbers()
-    if not phone_numbers:
-        logger.error("No phone numbers found in phone_numbers.txt")
-        return
-    
-    logger.info(f"Loaded {len(phone_numbers)} phone numbers to process")
-
-    cookies = await load_cookies()
-    if not cookies:
-        logger.warning("No cookies found in cookies.txt. Waiting for 60 seconds.")
-        print("[INFO] No cookies found in cookies.txt. Waiting for 60 seconds.")
-        await asyncio.sleep(60)
-        cookies = await load_cookies()
-        if not cookies:
-            logger.error("Still no cookies found. Exiting.")
-            print("[ERROR] Still no cookies found. Exiting.")
-            return
-
-    cookie_limits = {cookie: random.randint(5, 7) for cookie in cookies}
-    cookie_usage = {cookie: 0 for cookie in cookies}
-    cookie_list = list(cookies)
-    
-    logger.info(f"Initialized {len(cookie_list)} cookies with limits: {[cookie_limits[c] for c in cookie_list[:5]]}...")
-
-    # Build proxy URL from individual components
-    proxy_server = os.getenv("PROXY_SERVER")
-    proxy_username = os.getenv("PROXY_USERNAME")
-    proxy_password = os.getenv("PROXY_PASSWORD")
-    
-    if all([proxy_server, proxy_username, proxy_password]):
-        # Remove http:// from server if present to avoid double protocol
-        server_clean = proxy_server.replace("http://", "").replace("https://", "")
-        proxy = f"http://{proxy_username}:{proxy_password}@{server_clean}"
-        logger.info(f"Built proxy URL from components: {proxy[:30]}...")
-    else:
-        logger.warning("Proxy configuration not found in environment variables. Running without proxy.")
-        proxy = None
-
-    headers_template = {
-        "host": "www.doctolib.de",
-        "connection": "keep-alive",
-        "sec-ch-ua-platform": "\"Windows\"",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-        "accept": "application/json, text/plain, */*",
-        "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
-        "content-type": "application/json",
-        "sec-ch-ua-mobile": "?0",
-        "origin": "https://www.doctolib.de",
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-dest": "empty",
-        "accept-encoding": "gzip, deflate, br, zstd",
-        "accept-language": "en-US,en;q=0.9"
-    }
-
-    # Create session with better connection handling
-    timeout = ClientTimeout(total=20, connect=10)
-    connector = TCPConnector(
-        limit=10,  # Total connection pool size
-        limit_per_host=5,  # Max connections per host
-        ttl_dns_cache=300,  # DNS cache TTL
-        use_dns_cache=True,
-        keepalive_timeout=60,
-        enable_cleanup_closed=True
-    )
-
-    async with ClientSession(timeout=timeout, connector=connector) as session:
-        processed_count = 0
-        consecutive_errors = 0
-        max_consecutive_errors = 50  # Stop if too many consecutive errors
+    # Continuous loop to wait for phone numbers and cookies
+    while True:
+        # Load phone numbers initially
+        phone_numbers = safe_read_phone_numbers()
+        if not phone_numbers:
+            logger.warning("No phone numbers found in phone_numbers.txt. Waiting for 60 seconds before checking again...")
+            print("[INFO] No phone numbers found. Waiting for 60 seconds before checking again...")
+            await asyncio.sleep(60)
+            continue  # Go back to check for phone numbers again
         
-        # Process phone numbers in batches until file is empty
-        while True:
-            # Get current phone numbers from file (in case it was updated)
-            current_numbers = safe_read_phone_numbers()
-            
-            if not current_numbers:
-                logger.info("No more phone numbers to process. File is empty.")
-                break
-            
-            # Check if we have too many consecutive errors
-            if consecutive_errors >= max_consecutive_errors:
-                logger.error(f"Too many consecutive errors ({consecutive_errors}). Pausing for 10 minutes.")
-                print(f"[ERROR] Too many consecutive errors. Pausing for 10 minutes.")
-                await asyncio.sleep(60)  # 10 minutes
-                consecutive_errors = 0
-                continue
-            
-            logger.info(f"Processing batch with {len(current_numbers)} remaining numbers")
-            
-            # Take up to 5 numbers for this batch (reduced from 10 to avoid overwhelming)
-            batch_size = min(3, len(current_numbers))
-            batch_numbers = current_numbers[:batch_size]
-            
-            logger.info(f"Processing batch of {batch_size} numbers")
-            
-            tasks = []
-            cookie_index = 0
-            
-            for phone_number in batch_numbers:
-                # Check if we have cookies available
-                if not cookie_list:
-                    logger.warning("No cookies left. Waiting for 60 seconds.")
-                    print("[INFO] No cookies left. Waiting for 60 seconds.")
-                    await asyncio.sleep(60)
-                    new_cookies = await load_cookies()
-                    if not new_cookies:
-                        logger.error("No cookies available after waiting. Exiting.")
-                        print("[ERROR] No cookies available after waiting. Exiting.")
-                        return
-                    cookie_list.extend(new_cookies)
-                    for cookie in new_cookies:
-                        cookie_usage[cookie] = 0
-                        cookie_limits[cookie] = random.randint(5, 7)
-                    logger.info(f"Added {len(new_cookies)} new cookies")
+        logger.info(f"Loaded {len(phone_numbers)} phone numbers to process")
 
-                current_cookie = cookie_list[cookie_index % len(cookie_list)]
-                logger.debug(f"Using cookie {current_cookie[:8]}... for {phone_number}")
-                tasks.append(check_phone_number(session, phone_number, current_cookie, proxy, headers_template, url))
-                cookie_index += 1
+        # Continuous loop to wait for cookies
+        cookies = None
+        while not cookies:
+            cookies = await load_cookies()
+            if not cookies:
+                logger.warning("No cookies found in cookies.txt. Waiting for 60 seconds before checking again...")
+                print("[INFO] No cookies found in cookies.txt. Waiting for 60 seconds before checking again...")
+                await asyncio.sleep(60)
+                # Also check if phone numbers still exist while waiting for cookies
+                current_phone_numbers = safe_read_phone_numbers()
+                if not current_phone_numbers:
+                    logger.info("No phone numbers available while waiting for cookies. Breaking cookie wait loop.")
+                    break
+            else:
+                logger.info(f"Found {len(cookies)} cookies, starting processing...")
+                print(f"[INFO] Found {len(cookies)} cookies, starting processing...")
 
-            # Process the batch
-            if tasks:
-                logger.info(f"Executing batch of {len(tasks)} tasks")
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+        # If no phone numbers available, continue outer loop
+        if not cookies:
+            continue
+
+        cookie_limits = {cookie: random.randint(5, 7) for cookie in cookies}
+        cookie_usage = {cookie: 0 for cookie in cookies}
+        cookie_list = list(cookies)
+        
+        logger.info(f"Initialized {len(cookie_list)} cookies with limits: {[cookie_limits[c] for c in cookie_list[:5]]}...")
+
+        # Build proxy URL from individual components
+        proxy_server = os.getenv("PROXY_SERVER")
+        proxy_username = os.getenv("PROXY_USERNAME")
+        proxy_password = os.getenv("PROXY_PASSWORD")
+        
+        if all([proxy_server, proxy_username, proxy_password]):
+            # Remove http:// from server if present to avoid double protocol
+            server_clean = proxy_server.replace("http://", "").replace("https://", "")
+            proxy = f"http://{proxy_username}:{proxy_password}@{server_clean}"
+            logger.info(f"Built proxy URL from components: {proxy[:30]}...")
+        else:
+            logger.warning("Proxy configuration not found in environment variables. Running without proxy.")
+            proxy = None
+
+        headers_template = {
+            "host": "www.doctolib.de",
+            "connection": "keep-alive",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "accept": "application/json, text/plain, */*",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "content-type": "application/json",
+            "sec-ch-ua-mobile": "?0",
+            "origin": "https://www.doctolib.de",
+            "sec-fetch-site": "same-origin",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "en-US,en;q=0.9"
+        }
+
+        # Create session with better connection handling
+        timeout = ClientTimeout(total=20, connect=10)
+        connector = TCPConnector(
+            limit=10,  # Total connection pool size
+            limit_per_host=5,  # Max connections per host
+            ttl_dns_cache=300,  # DNS cache TTL
+            use_dns_cache=True,
+            keepalive_timeout=60,
+            enable_cleanup_closed=True
+        )
+
+        async with ClientSession(timeout=timeout, connector=connector) as session:
+            processed_count = 0
+            consecutive_errors = 0
+            max_consecutive_errors = 50  # Stop if too many consecutive errors
+            
+            # Process phone numbers in batches until file is empty
+            while True:
+                # Get current phone numbers from file (in case it was updated)
+                current_numbers = safe_read_phone_numbers()
                 
-                batch_success_count = 0
-                invalid_cookies = set()
+                if not current_numbers:
+                    logger.info("No more phone numbers to process in this session.")
+                    break  # Exit inner loop, will check for new numbers in outer loop
                 
-                for idx, result in enumerate(results):
-                    if isinstance(result, Exception):
-                        logger.error(f"Task {idx} failed with exception: {result}")
-                        consecutive_errors += 1
-                        continue
-                    if result is None:
-                        logger.warning(f"Task {idx} returned None")
-                        consecutive_errors += 1
-                        continue
-                    
-                    result_type, cookie, phone_number = result
-                    
-                    if result_type == "success":
-                        processed_count += 1
-                        batch_success_count += 1
-                        consecutive_errors = 0  # Reset on success
-                        
-                        # Update cookie usage
-                        if cookie in cookie_usage:
-                            cookie_usage[cookie] += 1
-                            logger.debug(f"Cookie {cookie[:8]}... usage: {cookie_usage[cookie]}/{cookie_limits[cookie]}")
-                            
-                            if cookie_usage[cookie] >= cookie_limits[cookie]:
-                                await remove_cookie(cookie, cookie_list, cookie_usage, cookie_limits)
-                    
-                    elif result_type == "invalid_cookie_retry":
-                        logger.warning(f"Cookie {cookie[:8]}... is invalid (401), marking for removal")
-                        invalid_cookies.add(cookie)
-                        # Add the phone number back for retry with a different cookie
-                        if add_number_for_retry(phone_number):
-                            logger.info(f"Added {phone_number} back for retry with different cookie")
-                        consecutive_errors += 1
-                    
-                    elif result_type == "invalid_cookie_no_retry":
-                        logger.warning(f"Cookie {cookie[:8]}... is invalid (HTTP error), marking for removal")
-                        invalid_cookies.add(cookie)
-                        processed_count += 1  # Count as processed since we won't retry
-                        consecutive_errors += 1
-                    
-                    elif result_type in ["timeout", "connection_closed"]:
-                        logger.warning(f"Network issue with {phone_number}: {result_type}")
-                        # Add back for retry
-                        if add_number_for_retry(phone_number):
-                            logger.info(f"Added {phone_number} back for retry due to {result_type}")
-                        consecutive_errors += 1
-                    
-                    else:  # exception
-                        consecutive_errors += 1
-                
-                # Remove all invalid cookies
-                for invalid_cookie in invalid_cookies:
-                    await remove_invalid_cookie(invalid_cookie, cookie_list, cookie_usage, cookie_limits)
-                
-                # Check if we need to reload cookies
-                if not cookie_list:
-                    logger.warning("No cookies left after removal. Waiting for 60 seconds.")
-                    print("[INFO] No cookies left after removal. Waiting for 60 seconds.")
+                # Check if we have too many consecutive errors
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(f"Too many consecutive errors ({consecutive_errors}). Pausing for 1 minute.")
+                    print(f"[ERROR] Too many consecutive errors. Pausing for 1 minute.")
                     await asyncio.sleep(60)
-                    new_cookies = await load_cookies()
-                    if new_cookies:
+                    consecutive_errors = 0
+                    continue
+                
+                logger.info(f"Processing batch with {len(current_numbers)} remaining numbers")
+                
+                # Take up to 5 numbers for this batch (reduced from 10 to avoid overwhelming)
+                batch_size = min(3, len(current_numbers))
+                batch_numbers = current_numbers[:batch_size]
+                
+                logger.info(f"Processing batch of {batch_size} numbers")
+                
+                tasks = []
+                cookie_index = 0
+                
+                for phone_number in batch_numbers:
+                    # Check if we have cookies available
+                    if not cookie_list:
+                        logger.warning("No cookies left. Waiting for 60 seconds.")
+                        print("[INFO] No cookies left. Waiting for 60 seconds.")
+                        await asyncio.sleep(60)
+                        new_cookies = await load_cookies()
+                        if not new_cookies:
+                            logger.warning("No cookies available after waiting. Ending this session.")
+                            print("[INFO] No cookies available after waiting. Ending this session.")
+                            break  # Exit processing loop, will restart in outer loop
                         cookie_list.extend(new_cookies)
                         for cookie in new_cookies:
                             cookie_usage[cookie] = 0
                             cookie_limits[cookie] = random.randint(5, 7)
-                        logger.info(f"Added {len(new_cookies)} new cookies after removal")
+                        logger.info(f"Added {len(new_cookies)} new cookies")
+
+                    current_cookie = cookie_list[cookie_index % len(cookie_list)]
+                    logger.debug(f"Using cookie {current_cookie[:8]}... for {phone_number}")
+                    tasks.append(check_phone_number(session, phone_number, current_cookie, proxy, headers_template, url))
+                    cookie_index += 1
+
+                # Process the batch
+                if tasks:
+                    logger.info(f"Executing batch of {len(tasks)} tasks")
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    batch_success_count = 0
+                    invalid_cookies = set()
+                    
+                    for idx, result in enumerate(results):
+                        if isinstance(result, Exception):
+                            logger.error(f"Task {idx} failed with exception: {result}")
+                            consecutive_errors += 1
+                            continue
+                        if result is None:
+                            logger.warning(f"Task {idx} returned None")
+                            consecutive_errors += 1
+                            continue
+                        
+                        result_type, cookie, phone_number = result
+                        
+                        if result_type == "success":
+                            processed_count += 1
+                            batch_success_count += 1
+                            consecutive_errors = 0  # Reset on success
+                            
+                            # Update cookie usage
+                            if cookie in cookie_usage:
+                                cookie_usage[cookie] += 1
+                                logger.debug(f"Cookie {cookie[:8]}... usage: {cookie_usage[cookie]}/{cookie_limits[cookie]}")
+                                
+                                if cookie_usage[cookie] >= cookie_limits[cookie]:
+                                    await remove_cookie(cookie, cookie_list, cookie_usage, cookie_limits)
+                        
+                        elif result_type == "invalid_cookie_retry":
+                            logger.warning(f"Cookie {cookie[:8]}... is invalid (401), marking for removal")
+                            invalid_cookies.add(cookie)
+                            # Add the phone number back for retry with a different cookie
+                            if add_number_for_retry(phone_number):
+                                logger.info(f"Added {phone_number} back for retry with different cookie")
+                            consecutive_errors += 1
+                        
+                        elif result_type == "invalid_cookie_no_retry":
+                            logger.warning(f"Cookie {cookie[:8]}... is invalid (HTTP error), marking for removal")
+                            invalid_cookies.add(cookie)
+                            processed_count += 1  # Count as processed since we won't retry
+                            consecutive_errors += 1
+                        
+                        elif result_type in ["timeout", "connection_closed"]:
+                            logger.warning(f"Network issue with {phone_number}: {result_type}")
+                            # Add back for retry
+                            if add_number_for_retry(phone_number):
+                                logger.info(f"Added {phone_number} back for retry due to {result_type}")
+                            consecutive_errors += 1
+                        
+                        else:  # exception
+                            consecutive_errors += 1
+                    
+                    # Remove all invalid cookies
+                    for invalid_cookie in invalid_cookies:
+                        await remove_invalid_cookie(invalid_cookie, cookie_list, cookie_usage, cookie_limits)
+                    
+                    # Check if we need to reload cookies
+                    if not cookie_list:
+                        logger.warning("No cookies left after removal. Ending this session.")
+                        print("[INFO] No cookies left after removal. Ending this session.")
+                        break  # Exit inner loop, will wait for cookies in outer loop
+                    
+                    logger.info(f"Batch completed. Successful: {batch_success_count}/{batch_size}. Total processed this session: {processed_count}")
+                    
+                    # Adaptive delay based on success rate
+                    if batch_success_count == 0:
+                        delay = 10  # Longer delay if no success
+                        logger.info("No successful requests in batch, waiting 10 seconds")
+                    elif batch_success_count < batch_size // 2:
+                        delay = 5   # Medium delay for low success rate
+                        logger.info("Low success rate, waiting 5 seconds")
                     else:
-                        logger.error("No cookies available after waiting and removal. Exiting.")
-                        print("[ERROR] No cookies available after waiting and removal. Exiting.")
-                        return
-                
-                logger.info(f"Batch completed. Successful: {batch_success_count}/{batch_size}. Total processed this session: {processed_count}")
-                
-                # Adaptive delay based on success rate
-                if batch_success_count == 0:
-                    delay = 10  # Longer delay if no success
-                    logger.info("No successful requests in batch, waiting 10 seconds")
-                elif batch_success_count < batch_size // 2:
-                    delay = 5   # Medium delay for low success rate
-                    logger.info("Low success rate, waiting 5 seconds")
-                else:
-                    delay = 2   # Normal delay for good success rate
-                
-                await asyncio.sleep(delay)
+                        delay = 2   # Normal delay for good success rate
+                    
+                    await asyncio.sleep(delay)
+            
+            logger.info(f"Session completed. Total processed this session: {processed_count}")
         
-        logger.info(f"Scraping completed. Total processed: {processed_count}")
-        
-        # Final status check
+        # After session ends, check if we should continue
         remaining = safe_read_phone_numbers()
-        logger.info(f"Final check: {len(remaining)} numbers remaining in phone_numbers.txt")
-
-
+        logger.info(f"Session check: {len(remaining)} numbers remaining in phone_numbers.txt")
+        
+        if not remaining:
+            logger.info("No more phone numbers to process. Waiting for 60 seconds before checking for new numbers...")
+            print("[INFO] No more phone numbers to process. Waiting for 60 seconds before checking for new numbers...")
+            await asyncio.sleep(60)
+        else:
+            logger.info("Phone numbers still available. Waiting 10 seconds before starting new session...")
+            await asyncio.sleep(10)
 if __name__ == "__main__":
     if sys.platform.startswith('win'):
        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
