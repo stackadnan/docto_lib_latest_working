@@ -2,9 +2,15 @@ import asyncio
 import os
 import random
 import logging
+import time
+import threading
 from datetime import datetime
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
+
+# Global file lock for thread-safe operations
+_file_lock = threading.Lock()
+_processed_numbers = set()  # Track processed numbers to prevent duplicates
 
 # Set up logging
 logging.basicConfig(
@@ -415,77 +421,99 @@ async def go_back_and_retry(page, index):
         return False
 
 def get_next_phone_number():
-    """Get the next phone number from results/phone_numbers.txt"""
-    try:
-        if not os.path.exists("results/phone_numbers.txt"):
-            logger.warning("Phone numbers file not found: results/phone_numbers.txt")
+    """Get the next phone number from results/phone_numbers.txt (thread-safe)"""
+    global _processed_numbers
+    
+    with _file_lock:
+        try:
+            if not os.path.exists("results/phone_numbers.txt"):
+                logger.warning("Phone numbers file not found: results/phone_numbers.txt")
+                return None
+                
+            with open("results/phone_numbers.txt", "r", encoding='utf-8') as f:
+                lines = [line.strip() for line in f if line.strip()]
+                
+            if not lines:
+                logger.warning("No phone numbers available in results/phone_numbers.txt")
+                return None
+                
+            # Find first number that hasn't been processed yet
+            for phone_number in lines:
+                if phone_number not in _processed_numbers:
+                    _processed_numbers.add(phone_number)
+                    logger.debug(f"Retrieved next phone number: {phone_number} (Remaining: {len(lines) - len(_processed_numbers)})")
+                    return phone_number
+            
+            logger.warning("All phone numbers in file have been processed")
             return None
-            
-        with open("results/phone_numbers.txt", "r", encoding='utf-8') as f:
-            lines = [line.strip() for line in f if line.strip()]
-            
-        if not lines:
-            logger.warning("No phone numbers available in results/phone_numbers.txt")
+        except Exception as e:
+            logger.error(f"Error reading phone numbers: {e}")
             return None
-            
-        # Return the first phone number
-        logger.debug(f"Retrieved next phone number: {lines[0]} (Remaining: {len(lines)})")
-        return lines[0]
-    except Exception as e:
-        logger.error(f"Error reading phone numbers: {e}")
-        return None
 
 def remove_phone_from_file(phone_number):
-    """Remove a phone number from results/phone_numbers.txt"""
-    try:
-        if not os.path.exists("results/phone_numbers.txt"):
-            logger.warning("Phone numbers file not found for removal")
-            return False
-            
-        with open("results/phone_numbers.txt", "r", encoding='utf-8') as f:
-            lines = [line.strip() for line in f if line.strip()]
-            
-        if phone_number not in lines:
-            logger.warning(f"Phone number {phone_number} not found in file for removal")
-            return False
-            
-        # Remove the phone number
-        lines.remove(phone_number)
-        
-        # Write back to file
-        with open("results/phone_numbers.txt", "w", encoding='utf-8') as f:
-            if lines:
-                f.write("\n".join(lines) + "\n")
-            else:
-                f.write("")  # Empty file
+    """Remove a phone number from results/phone_numbers.txt (thread-safe)"""
+    with _file_lock:
+        try:
+            if not os.path.exists("results/phone_numbers.txt"):
+                logger.warning("Phone numbers file not found for removal")
+                return False
                 
-        logger.info(f"Removed {phone_number} from phone_numbers.txt. Remaining: {len(lines)}")
-        return True
-    except Exception as e:
-        logger.error(f"Error removing phone number {phone_number}: {e}")
-        return False
+            with open("results/phone_numbers.txt", "r", encoding='utf-8') as f:
+                lines = [line.strip() for line in f if line.strip()]
+                
+            if phone_number not in lines:
+                logger.warning(f"Phone number {phone_number} not found in file for removal")
+                return False
+                
+            # Remove the phone number
+            lines.remove(phone_number)
+            
+            # Write back to file
+            with open("results/phone_numbers.txt", "w", encoding='utf-8') as f:
+                if lines:
+                    f.write("\n".join(lines) + "\n")
+                else:
+                    f.write("")  # Empty file
+                    
+            logger.info(f"Removed {phone_number} from phone_numbers.txt. Remaining: {len(lines)}")
+            return True
+        except Exception as e:
+            logger.error(f"Error removing phone number {phone_number}: {e}")
+            return False
 
 def save_phone_result(phone_number, is_registered):
-    """Save phone number to appropriate result file"""
-    try:
-        # Ensure results directory exists
-        os.makedirs("results", exist_ok=True)
-        
-        if is_registered:
-            result_file = "results/registered.txt"
-            status = "REGISTERED"
-        else:
-            result_file = "results/not_registered.txt"
-            status = "NOT REGISTERED"
+    """Save phone number to appropriate result file (thread-safe, prevents duplicates)"""
+    with _file_lock:
+        try:
+            # Ensure results directory exists
+            os.makedirs("results", exist_ok=True)
             
-        with open(result_file, "a", encoding='utf-8') as f:
-            f.write(f"{phone_number}\n")
+            if is_registered:
+                result_file = "results/registered.txt"
+                status = "REGISTERED"
+            else:
+                result_file = "results/not_registered.txt"
+                status = "NOT REGISTERED"
             
-        logger.info(f"Saved {phone_number} as {status}")
-        return True
-    except Exception as e:
-        logger.error(f"Error saving {phone_number}: {e}")
-        return False
+            # Check if number already exists in the file to prevent duplicates
+            existing_numbers = set()
+            if os.path.exists(result_file):
+                with open(result_file, "r", encoding='utf-8') as f:
+                    existing_numbers = {line.strip() for line in f if line.strip()}
+            
+            if phone_number in existing_numbers:
+                logger.warning(f"Phone number {phone_number} already exists in {result_file}, skipping duplicate")
+                return True
+                
+            # Append to file only if not duplicate
+            with open(result_file, "a", encoding='utf-8') as f:
+                f.write(f"{phone_number}\n")
+                
+            logger.info(f"Saved {phone_number} as {status}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving {phone_number}: {e}")
+            return False
 
 async def stealth(page, languages):
     """Enhanced stealth function with randomized properties"""
@@ -704,12 +732,73 @@ async def run_instance(index):
             logger.info(f"[{index}] Error cooldown: {error_delay:.1f}s")
             await asyncio.sleep(error_delay)
 
+async def cleanup_result_files():
+    """Remove duplicate entries from result files at startup"""
+    global _processed_numbers
+    
+    with _file_lock:
+        try:
+            # Clean registered.txt
+            if os.path.exists("results/registered.txt"):
+                with open("results/registered.txt", "r", encoding='utf-8') as f:
+                    registered_numbers = [line.strip() for line in f if line.strip()]
+                
+                # Remove duplicates while preserving order
+                unique_registered = []
+                seen = set()
+                for num in registered_numbers:
+                    if num not in seen:
+                        unique_registered.append(num)
+                        seen.add(num)
+                        _processed_numbers.add(num)  # Mark as processed
+                
+                if len(unique_registered) != len(registered_numbers):
+                    with open("results/registered.txt", "w", encoding='utf-8') as f:
+                        if unique_registered:
+                            f.write("\n".join(unique_registered) + "\n")
+                    logger.info(f"Cleaned registered.txt: {len(registered_numbers)} -> {len(unique_registered)} (removed {len(registered_numbers) - len(unique_registered)} duplicates)")
+                else:
+                    for num in unique_registered:
+                        _processed_numbers.add(num)
+            
+            # Clean not_registered.txt
+            if os.path.exists("results/not_registered.txt"):
+                with open("results/not_registered.txt", "r", encoding='utf-8') as f:
+                    not_registered_numbers = [line.strip() for line in f if line.strip()]
+                
+                # Remove duplicates while preserving order
+                unique_not_registered = []
+                seen = set()
+                for num in not_registered_numbers:
+                    if num not in seen:
+                        unique_not_registered.append(num)
+                        seen.add(num)
+                        _processed_numbers.add(num)  # Mark as processed
+                
+                if len(unique_not_registered) != len(not_registered_numbers):
+                    with open("results/not_registered.txt", "w", encoding='utf-8') as f:
+                        if unique_not_registered:
+                            f.write("\n".join(unique_not_registered) + "\n")
+                    logger.info(f"Cleaned not_registered.txt: {len(not_registered_numbers)} -> {len(unique_not_registered)} (removed {len(not_registered_numbers) - len(unique_not_registered)} duplicates)")
+                else:
+                    for num in unique_not_registered:
+                        _processed_numbers.add(num)
+                        
+            logger.info(f"Cleanup completed. {len(_processed_numbers)} numbers marked as already processed")
+            
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+
 async def main():
-    # Start with just 1 instance for testing, can be increased later
+    # Clean up duplicates before starting
+    logger.info("🧹 Cleaning up duplicate entries from previous runs...")
+    await cleanup_result_files()
+    
+    # Start with fewer instances to prevent race conditions
     logger.info("🚀 Starting browser fingerprint rotation system...")
     logger.info("📊 Each request will use a completely different fingerprint")
-    logger.info(f"Starting {20} browser instances")
-    tasks = [run_instance(i) for i in range(20)]  # Start with 20 instances
+    logger.info(f"Starting {5} browser instances (reduced to prevent race conditions)")
+    tasks = [run_instance(i) for i in range(5)]  # Reduced from 20 to 5 instances
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+2025-08-01 22:13:50,006 - INFO - Proxy configuration loaded: http://v2.proxyempire.io:5000
+2025-08-01 22:13:50,178 - INFO - Saved 491701234002 as NOT REGISTERED
+2025-08-01 22:13:50,181 - INFO - Removed 491701234002 from phone_numbers.txt. Remaining: 9
+2025-08-01 22:13:50,195 - INFO - Saved 491701234004 as REGISTERED
+2025-08-01 22:13:50,223 - INFO - Removed 491701234004 from phone_numbers.txt. Remaining: 8
+2025-08-01 22:13:50,234 - INFO - Saved 491701234001 as REGISTERED
+2025-08-01 22:13:50,252 - INFO - Removed 491701234001 from phone_numbers.txt. Remaining: 7
+2025-08-01 22:13:50,314 - INFO - Saved 491701234003 as NOT REGISTERED
+2025-08-01 22:13:50,315 - INFO - Removed 491701234003 from phone_numbers.txt. Remaining: 6
+2025-08-01 22:13:50,330 - INFO - Saved 491701234000 as REGISTERED
+2025-08-01 22:13:50,349 - INFO - Removed 491701234000 from phone_numbers.txt. Remaining: 5
+2025-08-01 22:13:50,467 - INFO - Saved 491701234005 as REGISTERED
+2025-08-01 22:13:50,469 - INFO - Removed 491701234005 from phone_numbers.txt. Remaining: 4
+2025-08-01 22:13:50,546 - INFO - Saved 491701234006 as REGISTERED
+2025-08-01 22:13:50,567 - INFO - Removed 491701234006 from phone_numbers.txt. Remaining: 3
+2025-08-01 22:13:50,578 - INFO - Saved 491701234007 as NOT REGISTERED
+2025-08-01 22:13:50,589 - INFO - Removed 491701234007 from phone_numbers.txt. Remaining: 2
+2025-08-01 22:13:50,604 - WARNING - All phone numbers in file have been processed
+2025-08-01 22:13:50,628 - INFO - Saved 491701234009 as NOT REGISTERED
+2025-08-01 22:13:50,629 - INFO - Removed 491701234009 from phone_numbers.txt. Remaining: 1
+2025-08-01 22:13:50,685 - WARNING - All phone numbers in file have been processed
+2025-08-01 22:13:50,702 - INFO - Saved 491701234008 as NOT REGISTERED
+2025-08-01 22:13:50,703 - WARNING - All phone numbers in file have been processed
+2025-08-01 22:13:50,705 - INFO - Removed 491701234008 from phone_numbers.txt. Remaining: 0
+2025-08-01 22:13:50,739 - WARNING - No phone numbers available in results/phone_numbers.txt
+2025-08-01 22:13:50,817 - WARNING - No phone numbers available in results/phone_numbers.txt
