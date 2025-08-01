@@ -110,7 +110,7 @@ def add_number_for_retry(phone_number, max_retries=3):
 
 async def check_phone_number(session, phone_number, cookie, proxy, headers_template, url):
     headers = headers_template.copy()
-    headers["cookie"] = f"dl_frcid={cookie}"
+    headers["cookie"] = f"{cookie}"
     payload = {"username": phone_number, "clientId": "patient-de-client"}
 
     try:

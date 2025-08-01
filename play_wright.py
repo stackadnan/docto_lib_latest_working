@@ -41,9 +41,9 @@ async def run_instance(index):
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
-                    headless=True,
+                    headless=False,
                     args=["--disable-blink-features=AutomationControlled"],
-                    proxy=PROXY
+                    # proxy=PROXY
                 )
 
                 context = await browser.new_context(
@@ -65,17 +65,23 @@ async def run_instance(index):
                 await page.fill('.oxygen-input-field__input.text-ellipsis', phone_number)
 
                 await page.get_by_role("button", name="Weiter").click()
-                await page.wait_for_timeout(50 * 1000)
+                await page.wait_for_timeout(30 * 1000)
 
                 cookies = await context.cookies()
-                dl_frcid = next((c['value'] for c in cookies if c['name'] == 'dl_frcid'), None)
+                cookie_string = '; '.join(f"{cookie['name']}={cookie['value']}" for cookie in cookies)
+                with open("cookies.txt", "a", encoding="utf-8") as f:
+                    f.write(cookie_string + "\n")
 
-                if dl_frcid:
-                    print(f"[{index}] dl_frcid={dl_frcid}")
-                    with open("cookies.txt", "a") as f:
-                        f.write(f"{dl_frcid}\n")
-                else:
-                    print(f"[{index}] dl_frcid not found")
+                print(f"[{index}] Cookies saved to cookies.txt")
+
+                # dl_frcid = next((c['value'] for c in cookies if c['name'] == 'dl_frcid'), None)
+
+                # if dl_frcid:
+                #     print(f"[{index}] dl_frcid={dl_frcid}")
+                #     with open("cookies.txt", "a") as f:
+                #         f.write(f"{dl_frcid}\n")
+                # else:
+                #     print(f"[{index}] dl_frcid not found")
 
                 await browser.close()
                 await asyncio.sleep(3)  # Optional delay before restarting
@@ -84,6 +90,6 @@ async def run_instance(index):
             await asyncio.sleep(5)  # Cooldown before retrying in case of error
 
 async def main():
-    tasks = [run_instance(i) for i in range(30)]
+    tasks = [run_instance(i) for i in range(1)]
     await asyncio.gather(*tasks)
 asyncio.run(main())

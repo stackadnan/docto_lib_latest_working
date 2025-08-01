@@ -222,10 +222,14 @@ def start_processing_services():
     global playwright_process, scraper_process
     
     try:
+        # Get the Python executable path
+        import sys
+        python_executable = sys.executable
+        
         # Start play_wright.py
         logger.info("Starting play_wright.py...")
         playwright_process = subprocess.Popen(
-            ["python", "play_wright.py"],
+            [python_executable, "play_wright.py"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -239,7 +243,7 @@ def start_processing_services():
                 global scraper_process
                 logger.info("Starting scraper.py...")
                 scraper_process = subprocess.Popen(
-                    ["python", "scraper.py"],
+                    [python_executable, "scraper.py"],
                     cwd=os.path.dirname(os.path.abspath(__file__)),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
