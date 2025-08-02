@@ -237,6 +237,26 @@ async def check_phone_number(session, phone_number, cookie, proxy, url):
     headers = generate_realistic_headers()
     headers["Cookie"] = f"dl_frcid={cookie}"  # Use proper case for Cookie header
     
+    # Linux-specific header modifications to better mimic Windows
+    if sys.platform.startswith('linux'):
+        # Add more Windows-specific headers that might be checked
+        headers["sec-ch-ua-wow64"] = "?0"
+        headers["sec-ch-ua-full-version-list"] = f'"Not)A;Brand";v="8.0.0.0", "Chromium";v="{headers.get("sec-ch-ua-full-version", "131.0.6778.85")}", "Google Chrome";v="{headers.get("sec-ch-ua-full-version", "131.0.6778.85")}"'
+        # Ensure consistent Windows-like order
+        ordered_headers = {}
+        header_order = [
+            "Host", "Connection", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
+            "sec-ch-ua-platform-version", "sec-ch-ua-arch", "sec-ch-ua-bitness", 
+            "sec-ch-ua-model", "sec-ch-ua-full-version", "sec-ch-ua-wow64", 
+            "sec-ch-ua-full-version-list", "User-Agent", "Content-Type", "Accept",
+            "Origin", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest", 
+            "Referer", "Accept-Encoding", "Accept-Language", "Cookie"
+        ]
+        for key in header_order:
+            if key in headers:
+                ordered_headers[key] = headers[key]
+        headers = ordered_headers
+    
     print(f"[INFO] Checking {phone_number} with cookie {cookie[:8]}...")
     logger.debug(f"Platform: {sys.platform}, Chrome version: {headers.get('sec-ch-ua-full-version', 'N/A')}")
     
@@ -245,8 +265,12 @@ async def check_phone_number(session, phone_number, cookie, proxy, url):
     try:
         logger.debug(f"Checking phone number: {phone_number} with cookie: {cookie[:8]}...")
         
-        # Add some delay for Linux to avoid being too aggressive
+        # Add platform-specific delays and request patterns
         if sys.platform.startswith('linux'):
+            # Linux: Use more Windows-like timing patterns
+            await asyncio.sleep(random.uniform(1.0, 2.5))  # Longer, more human-like delays
+        else:
+            # Windows: Keep original timing  
             await asyncio.sleep(random.uniform(0.5, 1.5))
         
         async with session.post(url, json=payload, headers=headers, proxy=proxy, timeout=20) as response:
