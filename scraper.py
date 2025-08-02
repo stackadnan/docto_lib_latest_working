@@ -4,6 +4,8 @@ import random,sys
 import logging
 import threading
 import os
+import uuid
+import time
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from datetime import datetime
 from dotenv import load_dotenv
@@ -28,13 +30,108 @@ file_lock = threading.Lock()
 # Track failed phone numbers for retry
 failed_numbers = {}  # phone_number -> retry_count
 
+# Ensure results directory exists
+def ensure_results_directory():
+    """Ensure the results directory exists."""
+    try:
+        os.makedirs("results", exist_ok=True)
+        return True
+    except Exception as e:
+        logger.error(f"Error creating results directory: {e}")
+        return False
+
+def generate_realistic_headers():
+    """Generate realistic headers with randomized fingerprinting"""
+    
+    # Different Chrome versions
+    chrome_versions = [
+        "138.0.7204.184",
+        "138.0.7204.150",
+        "137.0.6956.122",
+        "137.0.6956.99",
+        "136.0.6957.124",
+        "136.0.6957.99"
+    ]
+    
+    # Different platform versions
+    platform_versions = [
+        "19.0.0",
+        "15.0.0", 
+        "10.0.0",
+        "13.0.0"
+    ]
+    
+    # Different architectures (realistic for Windows)
+    architectures = ["x86", "arm"]
+    
+    # Different bitness
+    bitness_options = ["64", "32"]
+    
+    # Accept language variations
+    languages = [
+        "en-US,en;q=0.9",
+        "de-DE,de;q=0.9,en;q=0.8",
+        "en-GB,en;q=0.9",
+        "en-US,en;q=0.9,de;q=0.8",
+        "de,en-US;q=0.9,en;q=0.8"
+    ]
+    
+    # Select random values
+    chrome_version = random.choice(chrome_versions)
+    major_version = chrome_version.split('.')[0]
+    platform_version = random.choice(platform_versions)
+    arch = random.choice(architectures)
+    bitness = random.choice(bitness_options)
+    language = random.choice(languages)
+    
+    # Generate random session ID components
+    session_id = f"c{random.randint(100000, 999999)}win-{random.choice(['cA1Y', 'bX2Z', 'dR3W', 'eT4V'])}{random.choice(['ckyz', 'mnop', 'qrst', 'uvwx'])}{random.randint(10, 99)}{random.choice(['yC', 'zD', 'aE', 'bF'])}"
+    
+    # Generate random datadog session
+    dd_aid = str(uuid.uuid4())
+    dd_expire = int(time.time() * 1000) + random.randint(3600000, 7200000)  # 1-2 hours from now
+    
+    headers = {
+        "host": "www.doctolib.de",
+        "connection": "keep-alive",
+        "sec-ch-ua-full-version-list": f"\"Not)A;Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"{chrome_version}\", \"Google Chrome\";v=\"{chrome_version}\"",
+        "sec-ch-ua-platform": "\"Windows\"",
+        "sec-ch-ua": f"\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"{major_version}\", \"Google Chrome\";v=\"{major_version}\"",
+        "sec-ch-ua-bitness": f"\"{bitness}\"",
+        "sec-ch-ua-model": "\"\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-arch": f"\"{arch}\"",
+        "sec-ch-ua-full-version": f"\"{chrome_version}\"",
+        "accept": "application/json, text/plain, */*",
+        "content-type": "application/json",
+        "user-agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version.split('.')[0]}.0.0.0 Safari/537.36",
+        "sec-ch-ua-platform-version": f"\"{platform_version}\"",
+        "origin": "https://www.doctolib.de",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": language
+    }
+    
+    return headers
+
 print(f"Script started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 logger.info(f"Scraper started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# Ensure results directory exists at startup
+if not ensure_results_directory():
+    logger.error("Failed to create results directory. Exiting.")
+    sys.exit(1)
 
 def safe_remove_phone_number(phone_number):
     """Safely remove a phone number from the file with proper locking and error handling."""
     try:
         with file_lock:
+            # Ensure directory exists
+            if not ensure_results_directory():
+                return False
+                
             # Read current file
             if not os.path.exists("results/phone_numbers.txt"):
                 logger.warning("phone_numbers.txt does not exist during removal")
@@ -51,15 +148,32 @@ def safe_remove_phone_number(phone_number):
             # Remove the phone number
             lines.remove(phone_number)
             
-            # Write back to file
-            with open("results/phone_numbers.txt", "w", encoding='utf-8') as f:
-                if lines:
-                    f.write("\n".join(lines) + "\n")
+            # Write back to file atomically
+            temp_file = "results/phone_numbers.txt.tmp"
+            try:
+                with open(temp_file, "w", encoding='utf-8') as f:
+                    if lines:
+                        f.write("\n".join(lines) + "\n")
+                    else:
+                        f.write("")  # Empty file
+                
+                # Atomic move
+                if os.path.exists("results/phone_numbers.txt"):
+                    os.replace(temp_file, "results/phone_numbers.txt")
                 else:
-                    f.write("")  # Empty file
-            
-            logger.debug(f"Successfully removed {phone_number}. Remaining: {len(lines)}")
-            return True
+                    os.rename(temp_file, "results/phone_numbers.txt")
+                    
+                logger.debug(f"Successfully removed {phone_number}. Remaining: {len(lines)}")
+                return True
+                
+            except Exception as e:
+                # Clean up temp file on error
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+                raise e
             
     except Exception as e:
         logger.error(f"Error removing phone number {phone_number}: {e}")
@@ -69,6 +183,10 @@ def safe_read_phone_numbers():
     """Safely read phone numbers from file with proper error handling."""
     try:
         with file_lock:
+            # Ensure directory exists
+            if not ensure_results_directory():
+                return []
+                
             if not os.path.exists("results/phone_numbers.txt"):
                 return []
             
@@ -90,6 +208,10 @@ def add_number_for_retry(phone_number, max_retries=3):
     if retry_count <= max_retries:
         try:
             with file_lock:
+                # Ensure directory exists
+                if not ensure_results_directory():
+                    return False
+                    
                 # Add back to phone_numbers.txt for retry
                 with open("results/phone_numbers.txt", "a", encoding='utf-8') as f:
                     f.write(f"{phone_number}\n")
@@ -99,18 +221,28 @@ def add_number_for_retry(phone_number, max_retries=3):
             logger.error(f"Error adding {phone_number} for retry: {e}")
     else:
         logger.warning(f"Phone number {phone_number} exceeded max retries ({max_retries}), giving up")
-        # Write to not_registered as final fallback
+        # Write to not_registered as final fallback with file locking
         try:
-            with open("results/not_registered.txt", "a", encoding='utf-8') as f:
-                f.write(f"{phone_number}\n")
+            with file_lock:
+                # Ensure directory exists
+                if not ensure_results_directory():
+                    return False
+                    
+                with open("results/not_registered.txt", "a", encoding='utf-8') as f:
+                    f.write(f"{phone_number}\n")
         except Exception as e:
             logger.error(f"Error writing {phone_number} to not_registered.txt: {e}")
     
     return False
 
-async def check_phone_number(session, phone_number, cookie, proxy, headers_template, url):
-    headers = headers_template.copy()
+async def check_phone_number(session, phone_number, cookie, proxy, url):
+    # Generate realistic headers for each request
+    headers = generate_realistic_headers()
     headers["cookie"] = f"dl_frcid={cookie}"
+    
+    print(f"[INFO] Checking {phone_number} with cookie {cookie[:8]}...")
+    logger.debug(f"Using Chrome version: {headers.get('sec-ch-ua-full-version', 'N/A')}, Arch: {headers.get('sec-ch-ua-arch', 'N/A')}")
+    
     payload = {"username": phone_number, "clientId": "patient-de-client"}
 
     try:
@@ -125,8 +257,11 @@ async def check_phone_number(session, phone_number, cookie, proxy, headers_templ
                 # Write to appropriate result file
                 result_file = "results/registered.txt" if data.get("account_exists") else "results/not_registered.txt"
                 try:
-                    with open(result_file, "a", encoding='utf-8') as f:
-                        f.write(f"{phone_number}\n")
+                    with file_lock:
+                        # Ensure directory exists
+                        if ensure_results_directory():
+                            with open(result_file, "a", encoding='utf-8') as f:
+                                f.write(f"{phone_number}\n")
                 except Exception as e:
                     logger.error(f"Error writing to {result_file}: {e}")
                 
@@ -148,15 +283,15 @@ async def check_phone_number(session, phone_number, cookie, proxy, headers_templ
                 print(f"Response: {response_text}")
                 
                 # Write to not_registered file for failed requests
-                try:
-                    with open("results/not_registered.txt", "a", encoding='utf-8') as f:
-                        f.write(f"{phone_number}\n")
-                    logger.info(f"Saved {phone_number} to not_registered.txt (HTTP error {response.status})")
-                except Exception as e:
-                    logger.error(f"Error writing to not_registered.txt: {e}")
+                # try:
+                #     with open("results/not_registered.txt", "a", encoding='utf-8') as f:
+                #         f.write(f"{phone_number}\n")
+                #     logger.info(f"Saved {phone_number} to not_registered.txt (HTTP error {response.status})")
+                # except Exception as e:
+                #     logger.error(f"Error writing to not_registered.txt: {e}")
                 
                 # Remove from phone_numbers.txt
-                safe_remove_phone_number(phone_number)
+                # safe_remove_phone_number(phone_number)
                 
                 # Return as invalid_cookie_no_retry so cookie gets removed but number doesn't get retried
                 return "invalid_cookie_no_retry", cookie, phone_number
@@ -179,9 +314,12 @@ async def check_phone_number(session, phone_number, cookie, proxy, headers_templ
             
             # Write to not_registered file for exceptions (so numbers don't disappear)
             try:
-                with open("results/not_registered.txt", "a", encoding='utf-8') as f:
-                    f.write(f"{phone_number}\n")
-                logger.info(f"Saved {phone_number} to not_registered.txt (exception)")
+                with file_lock:
+                    # Ensure directory exists
+                    if ensure_results_directory():
+                        with open("results/not_registered.txt", "a", encoding='utf-8') as f:
+                            f.write(f"{phone_number}\n")
+                    logger.info(f"Saved {phone_number} to not_registered.txt (exception)")
             except Exception as write_e:
                 logger.error(f"Error writing to not_registered.txt: {write_e}")
             
@@ -199,8 +337,36 @@ async def remove_cookie(cookie, cookie_list, cookie_usage, cookie_limits):
         del cookie_usage[cookie]
     if cookie in cookie_limits:
         del cookie_limits[cookie]
-    with open("cookies.txt", "w") as f:
-        f.write("\n".join(cookie_list) + "\n")
+    
+    # Update cookies.txt file with proper locking and error handling
+    try:
+        with file_lock:
+            temp_file = "cookies.txt.tmp"
+            try:
+                with open(temp_file, "w", encoding='utf-8') as f:
+                    if cookie_list:
+                        f.write("\n".join(cookie_list) + "\n")
+                    else:
+                        f.write("")
+                
+                # Atomic move
+                if os.path.exists("cookies.txt"):
+                    os.replace(temp_file, "cookies.txt")
+                else:
+                    os.rename(temp_file, "cookies.txt")
+                    
+            except Exception as e:
+                # Clean up temp file on error
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+                raise e
+                
+    except Exception as e:
+        logger.error(f"Error updating cookies.txt: {e}")
+    
     logger.info(f"Cookie removed. Remaining cookies: {len(cookie_list)}")
 
 async def remove_invalid_cookie(cookie, cookie_list, cookie_usage, cookie_limits):
@@ -213,19 +379,50 @@ async def remove_invalid_cookie(cookie, cookie_list, cookie_usage, cookie_limits
         del cookie_usage[cookie]
     if cookie in cookie_limits:
         del cookie_limits[cookie]
-    # Update cookies.txt file
-    with open("cookies.txt", "w") as f:
-        f.write("\n".join(cookie_list) + "\n")
+    
+    # Update cookies.txt file with proper locking and error handling
+    try:
+        with file_lock:
+            temp_file = "cookies.txt.tmp"
+            try:
+                with open(temp_file, "w", encoding='utf-8') as f:
+                    if cookie_list:
+                        f.write("\n".join(cookie_list) + "\n")
+                    else:
+                        f.write("")
+                
+                # Atomic move
+                if os.path.exists("cookies.txt"):
+                    os.replace(temp_file, "cookies.txt")
+                else:
+                    os.rename(temp_file, "cookies.txt")
+                    
+            except Exception as e:
+                # Clean up temp file on error
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+                raise e
+                
+    except Exception as e:
+        logger.error(f"Error updating cookies.txt: {e}")
+    
     logger.warning(f"Invalid cookie removed. Remaining cookies: {len(cookie_list)}")
 
 async def load_cookies():
     try:
-        with open("cookies.txt", "r") as f:
-            cookies = [line.strip() for line in f if line.strip()]
-            logger.info(f"Loaded {len(cookies)} cookies from file")
-            return cookies
+        with file_lock:
+            with open("cookies.txt", "r", encoding='utf-8') as f:
+                cookies = [line.strip() for line in f if line.strip()]
+                logger.info(f"Loaded {len(cookies)} cookies from file")
+                return cookies
     except FileNotFoundError:
         logger.warning("cookies.txt file not found")
+        return []
+    except Exception as e:
+        logger.error(f"Error loading cookies: {e}")
         return []
 
 async def scraping():
@@ -283,23 +480,6 @@ async def scraping():
         else:
             logger.warning("Proxy configuration not found in environment variables. Running without proxy.")
             proxy = None
-
-        headers_template = {
-            "host": "www.doctolib.de",
-            "connection": "keep-alive",
-            "sec-ch-ua-platform": "\"Windows\"",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-            "accept": "application/json, text/plain, */*",
-            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
-            "content-type": "application/json",
-            "sec-ch-ua-mobile": "?0",
-            "origin": "https://www.doctolib.de",
-            "sec-fetch-site": "same-origin",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-dest": "empty",
-            "accept-encoding": "gzip, deflate, br, zstd",
-            "accept-language": "en-US,en;q=0.9"
-        }
 
         # Create session with better connection handling
         timeout = ClientTimeout(total=20, connect=10)
@@ -364,7 +544,7 @@ async def scraping():
 
                     current_cookie = cookie_list[cookie_index % len(cookie_list)]
                     logger.debug(f"Using cookie {current_cookie[:8]}... for {phone_number}")
-                    tasks.append(check_phone_number(session, phone_number, current_cookie, proxy, headers_template, url))
+                    tasks.append(check_phone_number(session, phone_number, current_cookie, proxy, url))
                     cookie_index += 1
 
                 # Process the batch
