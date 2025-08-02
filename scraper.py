@@ -41,31 +41,35 @@ def ensure_results_directory():
         return False
 
 def generate_realistic_headers():
-    """Generate realistic headers with randomized fingerprinting"""
+    """Generate realistic headers with randomized fingerprinting - cross-platform compatible"""
+    
+    # Detect platform for realistic headers
+    is_linux = sys.platform.startswith('linux')
+    is_windows = sys.platform.startswith('win')
     
     # Different Chrome versions
     chrome_versions = [
-        "138.0.7204.184",
-        "138.0.7204.150",
-        "137.0.6956.122",
-        "137.0.6956.99",
-        "136.0.6957.124",
-        "136.0.6957.99"
+        "131.0.6778.85",
+        "131.0.6778.69", 
+        "130.0.6723.117",
+        "130.0.6723.92",
+        "129.0.6668.100",
+        "129.0.6668.89"
     ]
     
-    # Different platform versions
-    platform_versions = [
-        "19.0.0",
-        "15.0.0", 
-        "10.0.0",
-        "13.0.0"
-    ]
-    
-    # Different architectures (realistic for Windows)
-    architectures = ["x86", "arm"]
-    
-    # Different bitness
-    bitness_options = ["64", "32"]
+    # Platform-specific configurations
+    if is_linux:
+        platform_name = "Linux"
+        platform_versions = ["6.5.0", "6.1.0", "5.15.0", "5.4.0"]
+        architectures = ["x86_64"]
+        bitness_options = ["64"]
+        user_agent_os = "X11; Linux x86_64"
+    else:  # Windows or default
+        platform_name = "Windows"
+        platform_versions = ["15.0.0", "10.0.0", "13.0.0", "19.0.0"]
+        architectures = ["x86", "arm64"]
+        bitness_options = ["64", "32"]
+        user_agent_os = "Windows NT 10.0; Win64; x64"
     
     # Accept language variations
     languages = [
@@ -84,40 +88,44 @@ def generate_realistic_headers():
     bitness = random.choice(bitness_options)
     language = random.choice(languages)
     
-    # Generate random session ID components
-    session_id = f"c{random.randint(100000, 999999)}win-{random.choice(['cA1Y', 'bX2Z', 'dR3W', 'eT4V'])}{random.choice(['ckyz', 'mnop', 'qrst', 'uvwx'])}{random.randint(10, 99)}{random.choice(['yC', 'zD', 'aE', 'bF'])}"
+    # Generate consistent session ID
+    session_components = ['cA1Y', 'bX2Z', 'dR3W', 'eT4V', 'mN8K', 'pQ5L']
+    session_suffix = ['ckyz', 'mnop', 'qrst', 'uvwx', 'abcd', 'efgh']
+    session_end = ['yC', 'zD', 'aE', 'bF', 'gH', 'iJ']
     
-    # Generate random datadog session
-    dd_aid = str(uuid.uuid4())
-    dd_expire = int(time.time() * 1000) + random.randint(3600000, 7200000)  # 1-2 hours from now
+    session_id = f"c{random.randint(100000, 999999)}{random.choice(session_components)}{random.choice(session_suffix)}{random.randint(10, 99)}{random.choice(session_end)}"
     
     headers = {
-        "host": "www.doctolib.de",
-        "connection": "keep-alive",
-        "sec-ch-ua-full-version-list": f"\"Not)A;Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"{chrome_version}\", \"Google Chrome\";v=\"{chrome_version}\"",
-        "sec-ch-ua-platform": "\"Windows\"",
-        "sec-ch-ua": f"\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"{major_version}\", \"Google Chrome\";v=\"{major_version}\"",
-        "sec-ch-ua-bitness": f"\"{bitness}\"",
-        "sec-ch-ua-model": "\"\"",
+        "Host": "www.doctolib.de",
+        "Connection": "keep-alive",
+        "sec-ch-ua": f'"Not)A;Brand";v="8", "Chromium";v="{major_version}", "Google Chrome";v="{major_version}"',
         "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-arch": f"\"{arch}\"",
-        "sec-ch-ua-full-version": f"\"{chrome_version}\"",
-        "accept": "application/json, text/plain, */*",
-        "content-type": "application/json",
-        "user-agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version.split('.')[0]}.0.0.0 Safari/537.36",
-        "sec-ch-ua-platform-version": f"\"{platform_version}\"",
-        "origin": "https://www.doctolib.de",
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-dest": "empty",
-        "accept-encoding": "gzip, deflate, br, zstd",
-        "accept-language": language
+        "sec-ch-ua-platform": f'"{platform_name}"',
+        "sec-ch-ua-platform-version": f'"{platform_version}"',
+        "sec-ch-ua-arch": f'"{arch}"',
+        "sec-ch-ua-bitness": f'"{bitness}"',
+        "sec-ch-ua-model": '""',
+        "sec-ch-ua-full-version": f'"{chrome_version}"',
+        "User-Agent": f"Mozilla/5.0 ({user_agent_os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.doctolib.de",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors", 
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://www.doctolib.de/",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": language,
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
     }
     
     return headers
 
 print(f"Script started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 logger.info(f"Scraper started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+logger.info(f"Platform detected: {sys.platform}")
+logger.info(f"Python version: {sys.version}")
 
 # Ensure results directory exists at startup
 if not ensure_results_directory():
@@ -238,16 +246,21 @@ def add_number_for_retry(phone_number, max_retries=3):
 async def check_phone_number(session, phone_number, cookie, proxy, url):
     # Generate realistic headers for each request
     headers = generate_realistic_headers()
-    headers["cookie"] = f"dl_frcid={cookie}"
+    headers["Cookie"] = f"dl_frcid={cookie}"  # Use proper case for Cookie header
     
     print(f"[INFO] Checking {phone_number} with cookie {cookie[:8]}...")
-    logger.debug(f"Using Chrome version: {headers.get('sec-ch-ua-full-version', 'N/A')}, Arch: {headers.get('sec-ch-ua-arch', 'N/A')}")
+    logger.debug(f"Platform: {sys.platform}, Chrome version: {headers.get('sec-ch-ua-full-version', 'N/A')}")
     
     payload = {"username": phone_number, "clientId": "patient-de-client"}
 
     try:
         logger.debug(f"Checking phone number: {phone_number} with cookie: {cookie[:8]}...")
-        async with session.post(url, json=payload, headers=headers, proxy=proxy, timeout=15) as response:
+        
+        # Add some delay for Linux to avoid being too aggressive
+        if sys.platform.startswith('linux'):
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+        
+        async with session.post(url, json=payload, headers=headers, proxy=proxy, timeout=20) as response:
             if response.status == 200:
                 data = await response.json()
                 result = "registered" if data.get("account_exists") else "not_registered"
@@ -275,23 +288,26 @@ async def check_phone_number(session, phone_number, cookie, proxy, url):
                 
                 # Return cookie as invalid for retry with different cookie
                 return "invalid_cookie_retry", cookie, phone_number
+            elif response.status == 403:
+                logger.warning(f"[FORBIDDEN] {phone_number} - Status 403, possible rate limiting")
+                print(f"[FORBIDDEN] {phone_number} - Rate limited or blocked")
+                
+                # Add longer delay for Linux systems on 403
+                if sys.platform.startswith('linux'):
+                    await asyncio.sleep(random.uniform(2.0, 5.0))
+                
+                return "rate_limited", cookie, phone_number
+            elif response.status >= 500:
+                logger.warning(f"[SERVER_ERROR] {phone_number} - Server error {response.status}")
+                print(f"[SERVER_ERROR] {phone_number} - Server error {response.status}")
+                
+                return "server_error", cookie, phone_number
             else:
                 logger.warning(f"[ERROR] {phone_number} failed. Status: {response.status}")
                 print(f"[ERROR] {phone_number} failed. Status: {response.status}")
                 response_text = await response.text()
-                logger.warning(f"Response: {response_text}")
-                print(f"Response: {response_text}")
-                
-                # Write to not_registered file for failed requests
-                # try:
-                #     with open("results/not_registered.txt", "a", encoding='utf-8') as f:
-                #         f.write(f"{phone_number}\n")
-                #     logger.info(f"Saved {phone_number} to not_registered.txt (HTTP error {response.status})")
-                # except Exception as e:
-                #     logger.error(f"Error writing to not_registered.txt: {e}")
-                
-                # Remove from phone_numbers.txt
-                # safe_remove_phone_number(phone_number)
+                logger.warning(f"Response: {response_text[:200]}...")  # Limit response text
+                print(f"Response: {response_text[:100]}...")
                 
                 # Return as invalid_cookie_no_retry so cookie gets removed but number doesn't get retried
                 return "invalid_cookie_no_retry", cookie, phone_number
@@ -302,29 +318,19 @@ async def check_phone_number(session, phone_number, cookie, proxy, url):
         # Don't remove from phone_numbers.txt on timeout - retry later
         return "timeout", cookie, phone_number
     except Exception as e:
-        error_msg = str(e)
-        if "10054" in error_msg or "forcibly closed" in error_msg:
-            logger.error(f"[CONNECTION_CLOSED] {phone_number} - Remote host closed connection")
+        error_msg = str(e).lower()
+        if any(keyword in error_msg for keyword in ["10054", "forcibly closed", "connection reset", "broken pipe"]):
+            logger.error(f"[CONNECTION_CLOSED] {phone_number} - Connection issue: {e}")
             print(f"[CONNECTION_CLOSED] {phone_number} - Connection forcibly closed")
             # Don't remove from phone_numbers.txt - this is likely rate limiting
             return "connection_closed", cookie, phone_number
+        elif "ssl" in error_msg or "certificate" in error_msg:
+            logger.error(f"[SSL_ERROR] {phone_number} - SSL/Certificate issue: {e}")
+            print(f"[SSL_ERROR] {phone_number} - SSL/Certificate error")
+            return "ssl_error", cookie, phone_number
         else:
             logger.error(f"[EXCEPTION] {phone_number} with cookie {cookie[:8]}... failed: {e}")
             print(f"[EXCEPTION] {phone_number} with cookie failed: {e}")
-            
-            # Write to not_registered file for exceptions (so numbers don't disappear)
-            try:
-                with file_lock:
-                    # Ensure directory exists
-                    if ensure_results_directory():
-                        with open("results/not_registered.txt", "a", encoding='utf-8') as f:
-                            f.write(f"{phone_number}\n")
-                    logger.info(f"Saved {phone_number} to not_registered.txt (exception)")
-            except Exception as write_e:
-                logger.error(f"Error writing to not_registered.txt: {write_e}")
-            
-            # Remove from phone_numbers.txt for other exceptions
-            safe_remove_phone_number(phone_number)
             
             return "exception", cookie, phone_number
 
@@ -427,6 +433,19 @@ async def load_cookies():
 
 async def scraping():
     url = "https://www.doctolib.de/authn/patient/realms/doctolib-patient/accounts/check_existence"
+    
+    # Platform-specific optimizations
+    if sys.platform.startswith('linux'):
+        logger.info("Running on Linux - applying platform-specific optimizations")
+        # Pre-resolve DNS to avoid issues
+        try:
+            import socket
+            socket.gethostbyname('www.doctolib.de')
+            logger.info("DNS resolution successful for www.doctolib.de")
+        except Exception as e:
+            logger.warning(f"DNS resolution issue: {e}")
+    else:
+        logger.info("Running on Windows - using standard configuration")
 
     # Continuous loop to wait for phone numbers and cookies
     while True:
@@ -481,15 +500,22 @@ async def scraping():
             logger.warning("Proxy configuration not found in environment variables. Running without proxy.")
             proxy = None
 
-        # Create session with better connection handling
-        timeout = ClientTimeout(total=20, connect=10)
+        # Create session with better connection handling and Linux compatibility
+        import ssl
+        
+        # Create SSL context that works better across platforms
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE  # More permissive for cross-platform compatibility
+        
+        timeout = ClientTimeout(total=30, connect=15)  # Increased timeouts for Linux
         connector = TCPConnector(
             limit=10,  # Total connection pool size
             limit_per_host=5,  # Max connections per host
             ttl_dns_cache=300,  # DNS cache TTL
             use_dns_cache=True,
-            keepalive_timeout=60,
-            enable_cleanup_closed=True
+            enable_cleanup_closed=True,
+            ssl=ssl_context  # Use custom SSL context
         )
 
         async with ClientSession(timeout=timeout, connector=connector) as session:
@@ -516,8 +542,15 @@ async def scraping():
                 
                 logger.info(f"Processing batch with {len(current_numbers)} remaining numbers")
                 
-                # Take up to 5 numbers for this batch (reduced from 10 to avoid overwhelming)
-                batch_size = min(3, len(current_numbers))
+                # Platform-specific batch size adjustment
+                if sys.platform.startswith('linux'):
+                    base_batch_size = 2  # Smaller batches for Linux to be more conservative
+                    max_batch_size = min(2, len(current_numbers))
+                else:
+                    base_batch_size = 3  # Standard batch size for Windows
+                    max_batch_size = min(3, len(current_numbers))
+                
+                batch_size = max_batch_size
                 batch_numbers = current_numbers[:batch_size]
                 
                 logger.info(f"Processing batch of {batch_size} numbers")
@@ -594,12 +627,32 @@ async def scraping():
                             processed_count += 1  # Count as processed since we won't retry
                             consecutive_errors += 1
                         
-                        elif result_type in ["timeout", "connection_closed"]:
+                        elif result_type == "rate_limited":
+                            logger.warning(f"Rate limited for {phone_number}, adding back for retry")
+                            if add_number_for_retry(phone_number):
+                                logger.info(f"Added {phone_number} back for retry due to rate limiting")
+                            consecutive_errors += 1
+                            
+                            # Add extra delay when rate limited on Linux
+                            if sys.platform.startswith('linux'):
+                                await asyncio.sleep(random.uniform(3.0, 8.0))
+                        
+                        elif result_type == "server_error":
+                            logger.warning(f"Server error for {phone_number}, adding back for retry")
+                            if add_number_for_retry(phone_number):
+                                logger.info(f"Added {phone_number} back for retry due to server error")
+                            consecutive_errors += 1
+                        
+                        elif result_type in ["timeout", "connection_closed", "ssl_error"]:
                             logger.warning(f"Network issue with {phone_number}: {result_type}")
                             # Add back for retry
                             if add_number_for_retry(phone_number):
                                 logger.info(f"Added {phone_number} back for retry due to {result_type}")
                             consecutive_errors += 1
+                            
+                            # Platform-specific delays
+                            if sys.platform.startswith('linux') and result_type in ["connection_closed", "ssl_error"]:
+                                await asyncio.sleep(random.uniform(2.0, 5.0))
                         
                         else:  # exception
                             consecutive_errors += 1
@@ -616,15 +669,28 @@ async def scraping():
                     
                     logger.info(f"Batch completed. Successful: {batch_success_count}/{batch_size}. Total processed this session: {processed_count}")
                     
-                    # Adaptive delay based on success rate
-                    if batch_success_count == 0:
-                        delay = 10  # Longer delay if no success
-                        logger.info("No successful requests in batch, waiting 10 seconds")
-                    elif batch_success_count < batch_size // 2:
-                        delay = 5   # Medium delay for low success rate
-                        logger.info("Low success rate, waiting 5 seconds")
+                    # Platform-specific adaptive delay
+                    if sys.platform.startswith('linux'):
+                        # More conservative delays for Linux
+                        if batch_success_count == 0:
+                            delay = random.uniform(15, 25)  # Longer delay if no success
+                            logger.info(f"No successful requests in batch (Linux), waiting {delay:.1f} seconds")
+                        elif batch_success_count < batch_size // 2:
+                            delay = random.uniform(8, 12)   # Medium delay for low success rate
+                            logger.info(f"Low success rate (Linux), waiting {delay:.1f} seconds")
+                        else:
+                            delay = random.uniform(3, 6)   # Normal delay for good success rate
+                            logger.info(f"Good success rate (Linux), waiting {delay:.1f} seconds")
                     else:
-                        delay = 2   # Normal delay for good success rate
+                        # Standard delays for Windows
+                        if batch_success_count == 0:
+                            delay = 10  # Longer delay if no success
+                            logger.info("No successful requests in batch, waiting 10 seconds")
+                        elif batch_success_count < batch_size // 2:
+                            delay = 5   # Medium delay for low success rate
+                            logger.info("Low success rate, waiting 5 seconds")
+                        else:
+                            delay = 2   # Normal delay for good success rate
                     
                     await asyncio.sleep(delay)
             
