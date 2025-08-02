@@ -47,37 +47,35 @@ def generate_realistic_headers():
     is_linux = sys.platform.startswith('linux')
     is_windows = sys.platform.startswith('win')
     
-    # Different Chrome versions
+    # Different Chrome versions - use more recent ones
     chrome_versions = [
         "131.0.6778.85",
         "131.0.6778.69", 
         "130.0.6723.117",
-        "130.0.6723.92",
-        "129.0.6668.100",
-        "129.0.6668.89"
+        "130.0.6723.92"
     ]
     
-    # Platform-specific configurations
+    # For Linux, we'll use Windows-like headers to avoid detection
     if is_linux:
-        platform_name = "Linux"
-        platform_versions = ["6.5.0", "6.1.0", "5.15.0", "5.4.0"]
-        architectures = ["x86_64"]
+        # Make Linux look like Windows to avoid detection - be more consistent
+        platform_name = "Windows"
+        platform_versions = ["15.0.0"]  # Use consistent Windows version
+        architectures = ["x86"]  # Use most common architecture
         bitness_options = ["64"]
-        user_agent_os = "X11; Linux x86_64"
+        user_agent_os = "Windows NT 10.0; Win64; x64"
+        logger.debug("Linux detected: Using consistent Windows-like headers to avoid detection")
     else:  # Windows or default
         platform_name = "Windows"
-        platform_versions = ["15.0.0", "10.0.0", "13.0.0", "19.0.0"]
+        platform_versions = ["15.0.0", "10.0.0", "13.0.0"]
         architectures = ["x86", "arm64"]
         bitness_options = ["64", "32"]
         user_agent_os = "Windows NT 10.0; Win64; x64"
     
-    # Accept language variations
+    # Accept language variations - use more common ones
     languages = [
         "en-US,en;q=0.9",
         "de-DE,de;q=0.9,en;q=0.8",
-        "en-GB,en;q=0.9",
-        "en-US,en;q=0.9,de;q=0.8",
-        "de,en-US;q=0.9,en;q=0.8"
+        "en-US,en;q=0.9,de;q=0.8"
     ]
     
     # Select random values
@@ -87,13 +85,6 @@ def generate_realistic_headers():
     arch = random.choice(architectures)
     bitness = random.choice(bitness_options)
     language = random.choice(languages)
-    
-    # Generate consistent session ID
-    session_components = ['cA1Y', 'bX2Z', 'dR3W', 'eT4V', 'mN8K', 'pQ5L']
-    session_suffix = ['ckyz', 'mnop', 'qrst', 'uvwx', 'abcd', 'efgh']
-    session_end = ['yC', 'zD', 'aE', 'bF', 'gH', 'iJ']
-    
-    session_id = f"c{random.randint(100000, 999999)}{random.choice(session_components)}{random.choice(session_suffix)}{random.randint(10, 99)}{random.choice(session_end)}"
     
     headers = {
         "Host": "www.doctolib.de",
@@ -115,9 +106,7 @@ def generate_realistic_headers():
         "Sec-Fetch-Dest": "empty",
         "Referer": "https://www.doctolib.de/",
         "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": language,
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
+        "Accept-Language": language
     }
     
     return headers
@@ -319,7 +308,14 @@ async def check_phone_number(session, phone_number, cookie, proxy, url):
         return "timeout", cookie, phone_number
     except Exception as e:
         error_msg = str(e).lower()
-        if any(keyword in error_msg for keyword in ["10054", "forcibly closed", "connection reset", "broken pipe"]):
+        
+        # Linux-specific connection error handling
+        if sys.platform.startswith('linux') and ("0, message=''" in str(e) or "connection error" in error_msg):
+            logger.error(f"[LINUX_CONNECTION_ERROR] {phone_number} - Linux connection issue: {e}")
+            print(f"[LINUX_CONNECTION_ERROR] {phone_number} - Linux connection failure (likely detection)")
+            # This specific error pattern suggests we're being detected - need to retry with different approach
+            return "linux_connection_error", cookie, phone_number
+        elif any(keyword in error_msg for keyword in ["10054", "forcibly closed", "connection reset", "broken pipe"]):
             logger.error(f"[CONNECTION_CLOSED] {phone_number} - Connection issue: {e}")
             print(f"[CONNECTION_CLOSED] {phone_number} - Connection forcibly closed")
             # Don't remove from phone_numbers.txt - this is likely rate limiting
@@ -508,14 +504,19 @@ async def scraping():
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE  # More permissive for cross-platform compatibility
         
-        timeout = ClientTimeout(total=30, connect=15)  # Increased timeouts for Linux
+        # Platform-specific timeouts
+        if sys.platform.startswith('linux'):
+            timeout = ClientTimeout(total=45, connect=20)  # More generous timeouts for Linux
+        else:
+            timeout = ClientTimeout(total=30, connect=15)
+            
         connector = TCPConnector(
-            limit=10,  # Total connection pool size
-            limit_per_host=5,  # Max connections per host
-            ttl_dns_cache=300,  # DNS cache TTL
+            limit=5,  # Reduced connection pool for Linux
+            limit_per_host=2,  # More conservative for Linux  
+            ttl_dns_cache=300,
             use_dns_cache=True,
             enable_cleanup_closed=True,
-            ssl=ssl_context  # Use custom SSL context
+            ssl=ssl_context
         )
 
         async with ClientSession(timeout=timeout, connector=connector) as session:
@@ -643,16 +644,24 @@ async def scraping():
                                 logger.info(f"Added {phone_number} back for retry due to server error")
                             consecutive_errors += 1
                         
-                        elif result_type in ["timeout", "connection_closed", "ssl_error"]:
+                        elif result_type in ["timeout", "connection_closed", "ssl_error", "linux_connection_error"]:
                             logger.warning(f"Network issue with {phone_number}: {result_type}")
                             # Add back for retry
                             if add_number_for_retry(phone_number):
                                 logger.info(f"Added {phone_number} back for retry due to {result_type}")
                             consecutive_errors += 1
                             
-                            # Platform-specific delays
-                            if sys.platform.startswith('linux') and result_type in ["connection_closed", "ssl_error"]:
-                                await asyncio.sleep(random.uniform(2.0, 5.0))
+                            # Platform-specific delays and handling
+                            if sys.platform.startswith('linux'):
+                                if result_type == "linux_connection_error":
+                                    # This is the specific "0, message=''" error - longer delay and cookie cycling
+                                    await asyncio.sleep(random.uniform(5.0, 10.0))
+                                    logger.warning("Linux connection error detected - forcing cookie rotation")
+                                    # Mark current cookie as potentially detected
+                                    if cookie in cookie_usage:
+                                        cookie_usage[cookie] = cookie_limits.get(cookie, 50)  # Force limit reached
+                                elif result_type in ["connection_closed", "ssl_error"]:
+                                    await asyncio.sleep(random.uniform(2.0, 5.0))
                         
                         else:  # exception
                             consecutive_errors += 1
